@@ -8,7 +8,8 @@ Wants=network-online.target
 Type=simple
 User=honeypot
 Group=honeypot
-ExecStart=/usr/local/bin/honeypot --bind 0.0.0.0 --log /var/log/honeypot/events.jsonl --max-connections 64 --workers 4
+EnvironmentFile=-/etc/honeypot.env
+ExecStart=/usr/local/bin/honeypot --bind 0.0.0.0 --log /var/log/honeypot/events.jsonl --ssh-host-key /var/lib/honeypot/ssh_host_ed25519 --max-connections 64 --workers 4 $HONEYPOT_ARGS
 Restart=always
 RestartSec=2
 
@@ -34,7 +35,7 @@ RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 SystemCallArchitectures=native
 SystemCallFilter=@system-service
 SystemCallErrorNumber=EPERM
-ReadWritePaths=/var/log/honeypot
+ReadWritePaths=/var/log/honeypot /var/lib/honeypot
 
 LimitNOFILE=4096
 MemoryMax=80M

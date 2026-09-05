@@ -3,7 +3,8 @@ mod http;
 mod rdp;
 mod redis;
 mod rtsp;
-mod ssh;
+mod smb;
+pub mod ssh;
 mod telnet;
 
 use crate::net::{accept_loop, bind, App};
@@ -19,6 +20,7 @@ pub enum Service {
     Rtsp { port: u16 },
     Redis { port: u16 },
     Rdp { port: u16 },
+    Smb { port: u16 },
 }
 
 impl Service {
@@ -31,6 +33,7 @@ impl Service {
             Service::Rtsp { .. } => "rtsp",
             Service::Redis { .. } => "redis",
             Service::Rdp { .. } => "rdp",
+            Service::Smb { .. } => "smb",
         }
     }
 
@@ -42,7 +45,8 @@ impl Service {
             | Service::Http { port }
             | Service::Rtsp { port }
             | Service::Redis { port }
-            | Service::Rdp { port } => *port,
+            | Service::Rdp { port }
+            | Service::Smb { port } => *port,
         }
     }
 
@@ -55,6 +59,7 @@ impl Service {
             Service::Rtsp { .. } => rtsp::handle(sock, peer, app, dst_port).await,
             Service::Redis { .. } => redis::handle(sock, peer, app, dst_port).await,
             Service::Rdp { .. } => rdp::handle(sock, peer, app, dst_port).await,
+            Service::Smb { .. } => smb::handle(sock, peer, app, dst_port).await,
         }
     }
 }

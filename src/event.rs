@@ -10,6 +10,8 @@ pub enum Kind {
     Probe,
     Password,
     Command,
+    Scan,
+    Heartbeat,
     Disconnect,
 }
 
@@ -21,6 +23,8 @@ impl Kind {
             Kind::Probe => "probe",
             Kind::Password => "password",
             Kind::Command => "command",
+            Kind::Scan => "scan",
+            Kind::Heartbeat => "heartbeat",
             Kind::Disconnect => "disconnect",
         }
     }
@@ -50,6 +54,10 @@ pub struct Event {
     pub data: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bytes: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mac: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub whitelisted: Option<bool>,
 }
 
 impl Event {
@@ -68,6 +76,8 @@ impl Event {
             ua: None,
             data: None,
             bytes: None,
+            mac: None,
+            whitelisted: None,
         }
     }
 

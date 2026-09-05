@@ -5,7 +5,7 @@ use std::path::PathBuf;
 #[derive(Parser, Debug, Clone)]
 #[command(
     name = "honeypot",
-    about = "Low-interaction TCP honeypot. Logs probes; never executes attacker input.",
+    about = "LAN intrusion alarm (StingBox-style). Logs probes; never executes attacker input.",
     version
 )]
 pub struct Args {
@@ -58,6 +58,36 @@ pub struct Args {
     pub redis_port: u16,
     #[arg(long, default_value_t = 3389)]
     pub rdp_port: u16,
+    #[arg(long, default_value_t = 445)]
+    pub smb_port: u16,
+
+    /// POST JSON alerts here (Discord/ntfy/Herald). HTTPS allowed.
+    #[arg(long)]
+    pub webhook: Option<String>,
+
+    /// Syslog CEF destination, host:port (TCP then UDP)
+    #[arg(long)]
+    pub syslog: Option<String>,
+
+    /// Collapse repeat alerts from the same IP (StingBox default is 10 minutes)
+    #[arg(long, default_value_t = 600)]
+    pub alert_cooldown_secs: u64,
+
+    /// Name included in webhook/syslog payloads
+    #[arg(long, default_value = "honeypot")]
+    pub name: String,
+
+    /// Do not alert on these source IPs (scanners you own)
+    #[arg(long = "allow-ip")]
+    pub allow_ip: Vec<IpAddr>,
+
+    /// Persist the decoy SSH host key (stable fingerprint)
+    #[arg(long)]
+    pub ssh_host_key: Option<PathBuf>,
+
+    /// Seconds between heartbeat log lines. 0 disables.
+    #[arg(long, default_value_t = 300)]
+    pub heartbeat_secs: u64,
 
     #[arg(long)]
     pub no_ssh: bool,
@@ -73,4 +103,6 @@ pub struct Args {
     pub no_redis: bool,
     #[arg(long)]
     pub no_rdp: bool,
+    #[arg(long)]
+    pub no_smb: bool,
 }

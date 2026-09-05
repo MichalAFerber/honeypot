@@ -7,7 +7,7 @@ use tokio::net::TcpStream;
 /// vsFTPd-style login trap. Never opens a data connection: PORT/PASV/EPRT/EPSV
 /// are logged and refused so this cannot be used as a bounce proxy.
 pub async fn handle(mut sock: TcpStream, peer: SocketAddr, app: App, port: u16) {
-    app.log.emit(Event::new("ftp", port, peer, Kind::Connect));
+    app.emit(Event::new("ftp", port, peer, Kind::Connect));
     jitter_ms(app.jitter_ms.0, app.jitter_ms.1).await;
     let _ = write_all_timeout(&mut sock, b"220 (vsFTPd 3.0.3)\r\n", app.read_timeout).await;
 
@@ -40,7 +40,7 @@ pub async fn handle(mut sock: TcpStream, peer: SocketAddr, app: App, port: u16) 
             .await;
         } else if upper.starts_with("PASS ") {
             let password = truncate(line[5..].trim(), MAX_FIELD);
-            app.log.emit(
+            app.emit(
                 Event::new("ftp", port, peer, Kind::Password)
                     .user(username.clone())
                     .pass(password),
@@ -57,7 +57,7 @@ pub async fn handle(mut sock: TcpStream, peer: SocketAddr, app: App, port: u16) 
             || upper.starts_with("EPSV")
         {
             // Do not connect outbound. A PORT bounce would make this a proxy.
-            app.log.emit(
+            app.emit(
                 Event::new("ftp", port, peer, Kind::Command)
                     .data(truncate(line, MAX_FIELD))
                     .client("data-channel-refused"),
@@ -69,8 +69,7 @@ pub async fn handle(mut sock: TcpStream, peer: SocketAddr, app: App, port: u16) 
             )
             .await;
         } else {
-            app.log
-                .emit(Event::new("ftp", port, peer, Kind::Command).data(truncate(line, MAX_FIELD)));
+            app.emit(Event::new("ftp", port, peer, Kind::Command).data(truncate(line, MAX_FIELD)));
             let _ = write_all_timeout(
                 &mut sock,
                 b"530 Please login with USER and PASS.\r\n",
@@ -80,7 +79,6 @@ pub async fn handle(mut sock: TcpStream, peer: SocketAddr, app: App, port: u16) 
         }
     }
 
-    app.log
-        .emit(Event::new("ftp", port, peer, Kind::Disconnect));
+    app.emit(Event::new("ftp", port, peer, Kind::Disconnect));
     graceful_close(sock).await;
 }

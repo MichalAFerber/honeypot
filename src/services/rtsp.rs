@@ -5,16 +5,14 @@ use std::net::SocketAddr;
 use tokio::net::TcpStream;
 
 pub async fn handle(mut sock: TcpStream, peer: SocketAddr, app: App, port: u16) {
-    app.log.emit(Event::new("rtsp", port, peer, Kind::Connect));
+    app.emit(Event::new("rtsp", port, peer, Kind::Connect));
     jitter_ms(app.jitter_ms.0, app.jitter_ms.1).await;
 
     let raw = match read_until(&mut sock, b"\r\n\r\n", app.max_read, app.read_timeout).await {
         Ok(buf) if !buf.is_empty() => buf,
         _ => {
-            app.log
-                .emit(Event::new("rtsp", port, peer, Kind::Probe).data("connect-no-data"));
-            app.log
-                .emit(Event::new("rtsp", port, peer, Kind::Disconnect));
+            app.emit(Event::new("rtsp", port, peer, Kind::Probe).data("connect-no-data"));
+            app.emit(Event::new("rtsp", port, peer, Kind::Disconnect));
             graceful_close(sock).await;
             return;
         }
@@ -25,7 +23,7 @@ pub async fn handle(mut sock: TcpStream, peer: SocketAddr, app: App, port: u16) 
     let cseq = header_value(&text, "cseq").unwrap_or("1");
     let auth = header_value(&text, "authorization");
 
-    app.log.emit(
+    app.emit(
         Event::new("rtsp", port, peer, Kind::Probe)
             .bytes(raw.len())
             .data(preview(first.as_bytes()))
@@ -34,13 +32,13 @@ pub async fn handle(mut sock: TcpStream, peer: SocketAddr, app: App, port: u16) 
 
     if let Some(auth) = auth {
         if let Some((u, p)) = decode_basic_auth(auth) {
-            app.log.emit(
+            app.emit(
                 Event::new("rtsp", port, peer, Kind::Password)
                     .user(u)
                     .pass(p),
             );
         } else {
-            app.log.emit(
+            app.emit(
                 Event::new("rtsp", port, peer, Kind::Password).data(truncate(auth, MAX_FIELD)),
             );
         }
@@ -51,7 +49,6 @@ pub async fn handle(mut sock: TcpStream, peer: SocketAddr, app: App, port: u16) 
     );
     let _ = write_all_timeout(&mut sock, resp.as_bytes(), app.read_timeout).await;
 
-    app.log
-        .emit(Event::new("rtsp", port, peer, Kind::Disconnect));
+    app.emit(Event::new("rtsp", port, peer, Kind::Disconnect));
     graceful_close(sock).await;
 }

@@ -1,8 +1,11 @@
+use crate::alert::Alerter;
 use crate::event::{Event, Kind};
 use crate::log::EventLog;
+use crate::scan::ScanWatch;
 use crate::services::Service;
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
-use std::net::SocketAddr;
+use std::collections::HashSet;
+use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::AsyncWriteExt;
@@ -18,6 +21,48 @@ pub struct App {
     pub max_read: usize,
     pub max_lines: usize,
     pub jitter_ms: (u64, u64),
+    pub allowlist: Arc<HashSet<IpAddr>>,
+    pub alerts: Alerter,
+    pub scans: ScanWatch,
+    pub ssh: Option<Arc<russh::server::Config>>,
+}
+
+impl App {
+    pub fn for_test(log: EventLog) -> Self {
+        use crate::alert::{AlertConfig, Alerter};
+        use std::collections::HashSet;
+        Self {
+            log,
+            cap: Arc::new(Semaphore::new(8)),
+            read_timeout: Duration::from_secs(2),
+            idle_timeout: Duration::from_secs(2),
+            max_read: 4096,
+            max_lines: 16,
+            jitter_ms: (0, 0),
+            allowlist: Arc::new(HashSet::new()),
+            alerts: Alerter::spawn(AlertConfig::disabled()),
+            scans: crate::scan::ScanWatch::disabled(),
+            ssh: None,
+        }
+    }
+
+    pub fn emit(&self, mut ev: Event) {
+        if let Some(ip) = crate::arp::ip_from_src(&ev.src) {
+            if ev.mac.is_none() {
+                ev.mac = crate::arp::lookup(ip);
+            }
+            if self.allowlist.contains(&ip) {
+                ev.whitelisted = Some(true);
+            }
+        }
+        let scan = self.scans.observe(&ev);
+        self.log.emit(ev.clone());
+        self.alerts.consider(&ev);
+        if let Some(scan) = scan {
+            self.log.emit(scan.clone());
+            self.alerts.consider(&scan);
+        }
+    }
 }
 
 pub fn bind(addr: SocketAddr) -> anyhow::Result<TcpListener> {
@@ -64,8 +109,7 @@ pub async fn accept_loop(listener: TcpListener, app: App, svc: Service) {
         let permit = match app.cap.clone().try_acquire_owned() {
             Ok(p) => p,
             Err(_) => {
-                app.log
-                    .emit(Event::new(name, port, peer, Kind::ConnectDropped));
+                app.emit(Event::new(name, port, peer, Kind::ConnectDropped));
                 graceful_close(sock).await;
                 continue;
             }

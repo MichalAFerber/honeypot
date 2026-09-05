@@ -7,28 +7,27 @@ use std::net::SocketAddr;
 use tokio::net::TcpStream;
 
 const LOGIN_PAGE: &str = concat!(
-    "<!DOCTYPE html><html><head><title>IPCAM</title></head>",
+    "<!DOCTYPE html><html><head><title>FILESERVER - Microsoft IIS</title></head>",
     "<body bgcolor=\"#ffffff\"><div align=\"center\">",
-    "<h3>IP Camera</h3>",
+    "<h2>Windows File Server</h2>",
+    "<p>\\\\FILESERVER\\share</p>",
     "<form method=\"POST\" action=\"/login.html\">",
     "Username: <input name=\"username\"><br>",
     "Password: <input type=\"password\" name=\"password\"><br>",
-    "<input type=\"submit\" value=\"Login\"></form>",
-    "<p>IPC-HDW1431S Firmware 2.400.0000000.16.R</p>",
+    "<input type=\"submit\" value=\"Log On\"></form>",
+    "<p>IIS 10.0 / Windows Server 2019</p>",
     "</div></body></html>"
 );
 
 pub async fn handle(mut sock: TcpStream, peer: SocketAddr, app: App, port: u16) {
-    app.log.emit(Event::new("http", port, peer, Kind::Connect));
+    app.emit(Event::new("http", port, peer, Kind::Connect));
     jitter_ms(app.jitter_ms.0, app.jitter_ms.1).await;
 
     let raw = match read_until(&mut sock, b"\r\n\r\n", app.max_read, app.read_timeout).await {
         Ok(buf) if !buf.is_empty() => buf,
         _ => {
-            app.log
-                .emit(Event::new("http", port, peer, Kind::Probe).data("connect-no-data"));
-            app.log
-                .emit(Event::new("http", port, peer, Kind::Disconnect));
+            app.emit(Event::new("http", port, peer, Kind::Probe).data("connect-no-data"));
+            app.emit(Event::new("http", port, peer, Kind::Disconnect));
             graceful_close(sock).await;
             return;
         }
@@ -61,18 +60,18 @@ pub async fn handle(mut sock: TcpStream, peer: SocketAddr, app: App, port: u16) 
     if let Some(ref ua) = ua {
         ev = ev.ua(ua.clone());
     }
-    app.log.emit(ev);
+    app.emit(ev);
 
     if let Some(ref auth) = auth {
         if let Some((u, p)) = decode_basic_auth(auth) {
-            app.log.emit(
+            app.emit(
                 Event::new("http", port, peer, Kind::Password)
                     .user(u)
                     .pass(p)
                     .client("basic"),
             );
         } else {
-            app.log.emit(
+            app.emit(
                 Event::new("http", port, peer, Kind::Password)
                     .data(truncate(auth, MAX_FIELD))
                     .client("authorization"),
@@ -91,14 +90,14 @@ pub async fn handle(mut sock: TcpStream, peer: SocketAddr, app: App, port: u16) 
             if let Some(p) = pass {
                 ev = ev.pass(p);
             }
-            app.log.emit(ev);
+            app.emit(ev);
         }
     }
 
     let body = LOGIN_PAGE.as_bytes();
     let resp = format!(
         "HTTP/1.1 200 OK\r\n\
-         Server: mini_httpd/1.19 19dec2003\r\n\
+         Server: Microsoft-IIS/10.0\r\n\
          Content-Type: text/html\r\n\
          Content-Length: {}\r\n\
          Connection: close\r\n\
@@ -109,8 +108,7 @@ pub async fn handle(mut sock: TcpStream, peer: SocketAddr, app: App, port: u16) 
     let _ = write_all_timeout(&mut sock, resp.as_bytes(), app.read_timeout).await;
     let _ = write_all_timeout(&mut sock, body, app.read_timeout).await;
 
-    app.log
-        .emit(Event::new("http", port, peer, Kind::Disconnect));
+    app.emit(Event::new("http", port, peer, Kind::Disconnect));
     graceful_close(sock).await;
 }
 

@@ -1,25 +1,42 @@
 # honeypot
 
-Class D (internal homelab). A low-interaction multi-port TCP honeypot in Rust, aimed at a Raspberry Pi Zero 2W. It binds common attack ports, speaks just enough of each protocol to look real, logs structured JSONL, and **never executes attacker input or makes outbound connections on the attacker’s behalf**.
+Class D (internal homelab). A [StingBox](https://www.stingbox.com/)-style **LAN intrusion alarm** in Rust, aimed at a Raspberry Pi Zero 2W (the same 512 MB ARM class StingBox ships). Plug it into a subnet, let it look like an unsecured file server, and get a webhook the moment anything scans or logs in.
 
-This is a decoy, not a shell. It is not Cowrie, not a VM, and not an LLM honeypot.
+It is a tripwire, not a lock. StingBox’s own FAQ: it does not stop hackers; it detects them so you can respond. Same here.
+
+It binds the services attackers look for on an internal network (SMB, RDP, FTP, SSH, HTTP), speaks just enough of each protocol to look real, logs structured JSONL, and **never executes attacker input or opens outbound connections on the attacker’s behalf**. SSH “login” accepts any password and drops the attacker into a canned Ubuntu prompt (the HackerCam equivalent: keystrokes are logged, `wget` always “fails”).
+
+This is not Cowrie, not a VM, not an LLM honeypot, and not StingBox’s cloud dashboard. No phone-home, no LAN/WAN scanning of your other hosts, no subscription.
 
 ## What it pretends to be
 
+StingBox’s advertised lure is SSH, RDP, FTP, SMB, and HTTP/S. This crate matches that set, plus a few optional extras.
+
 | Service | Default port | Behavior |
 |---|---|---|
-| SSH | 22 | OpenSSH 8.9 banner + client version string. Password auth is **not** parsed (SSH is binary after the banner; that needs `russh` later). |
-| Telnet | 23 | BusyBox login, then a fake `#` prompt. Commands are logged and answered from a canned table. `wget`/`curl` always “fail.” |
-| FTP | 21 | vsFTPd USER/PASS. `PORT`/`PASV`/`EPRT`/`EPSV` are refused so this cannot be a bounce proxy. |
-| HTTP | 80, 8080 | Cheap IP-camera login page. Logs method, path, User-Agent, Basic auth, and POST form credentials. |
-| RTSP | 554 | 401 + Basic challenge (camera stream endpoint). |
-| Redis | 6379 | `PING` → `PONG`. `AUTH` logged. `CONFIG`/`SLAVEOF`/`MIGRATE`/`MODULE`/`EVAL`/… are logged and `-ERR`. |
+| SMB | 445 | Windows file server. SMB2 negotiate + NTLM challenge; captures domain/user/workstation from Type 3. Never opens a share. |
+| SSH | 22 | OpenSSH 8.9. **Any password is accepted** into a fake `root@FILESERVER` shell. Commands are logged; nothing is executed. Direct-tcpip and port forwards are refused. |
 | RDP | 3389 | Reads the `Cookie: mstshash=` username and FINs. |
+| FTP | 21 | vsFTPd USER/PASS. StingBox’s own test is `ftp://<ip>`. `PORT`/`PASV`/`EPRT`/`EPSV` return 425 so this cannot be a bounce proxy. |
+| HTTP | 80, 8080 | IIS-looking file-server login. Logs method, path, User-Agent, Basic auth, and POST form credentials. |
+| Telnet | 23 | BusyBox login, then a fake `#` prompt. |
+| RTSP | 554 | Optional camera 401. |
+| Redis | 6379 | Optional `PING`/`AUTH`. Hostile commands (`CONFIG`, `SLAVEOF`, `MIGRATE`, …) are `-ERR`. |
+
+Alerts (the actual product, same as StingBox):
+
+- `--webhook https://ntfy.sh/your-topic` — JSON POST on probe/login/command (rate-limited per source IP, default 10 minutes; passwords always go through)
+- `--syslog 192.168.1.10:514` — CEF over TCP, UDP fallback
+- `--allow-ip 192.168.1.5` — whitelist your vulnerability scanner
+- Source **MAC** is filled from `/proc/net/arp` when the peer is L2-local
+- Hitting three decoy ports inside 10 seconds emits a `scan` event
+
+Not in this crate (StingBox cloud features we are **not** copying): phone/SMS/voice, HackerCam video, LAN ping/ARP inventory of other hosts, WAN open-port scans, SMB-share scanning of *your* endpoints. Those last items are active scanning; this process stays a passive trap.
 
 Hard rules, all of them load-bearing:
 
-- No `std::process`. No shells. No file writes except the JSONL log.
-- No outbound TCP from protocol handlers. FTP data channels are refused. Redis migration commands are ignored. HTTP does not follow URLs.
+- No `std::process`. No real shells. File writes are the JSONL log and the optional SSH host key.
+- No outbound TCP from protocol handlers. FTP data channels are refused. Redis migration commands are ignored. HTTP does not follow URLs. The only outbound sockets are the webhook/syslog you configured.
 - Reads are bounded and timed out. Concurrent connections are capped (default 64).
 - Excess connections are closed with FIN, not RST.
 - Tokio worker threads default to 4 (Zero 2W core count).
@@ -32,7 +49,7 @@ One object per event, appended to `--log` (default `events.jsonl`):
 {"ts":"2026-09-05T04:12:01Z","svc":"ftp","dst_port":21,"src":"203.0.113.9:48122","event":"password","user":"root","pass":"admin123"}
 ```
 
-`event` is one of `connect`, `connect_dropped`, `probe`, `password`, `command`, `disconnect`.
+`event` is one of `connect`, `connect_dropped`, `probe`, `password`, `command`, `scan`, `heartbeat`, `disconnect`.
 
 ```sh
 jq -r 'select(.event=="password") | [.svc,.src,.user,.pass] | @tsv' events.jsonl
@@ -48,8 +65,13 @@ cargo build --release
 ./target/release/honeypot --bind 127.0.0.1 \
   --ssh-port 2222 --telnet-port 2323 --ftp-port 2121 \
   --http-port 8080 --http-alt-port 0 \
-  --rtsp-port 8554 --redis-port 16379 --rdp-port 13389 \
+  --rtsp-port 0 --redis-port 0 --rdp-port 13389 --smb-port 1445 \
+  --webhook http://127.0.0.1:9999/hook \
   --log ./events.jsonl
+
+# StingBox-style smoke test from another host on the LAN:
+#   ftp://<pi-ip>     (this is how StingBox tells you to test)
+#   nmap -sV <pi-ip>
 ```
 
 ## Cross-compile for the Zero 2W

@@ -25,7 +25,7 @@ const HOSTILE: &[&str] = &[
 ];
 
 pub async fn handle(mut sock: TcpStream, peer: SocketAddr, app: App, port: u16) {
-    app.log.emit(Event::new("redis", port, peer, Kind::Connect));
+    app.emit(Event::new("redis", port, peer, Kind::Connect));
     jitter_ms(app.jitter_ms.0, app.jitter_ms.1).await;
 
     let mut exchanges = 0usize;
@@ -41,7 +41,7 @@ pub async fn handle(mut sock: TcpStream, peer: SocketAddr, app: App, port: u16) 
         let cmd = first_command(&raw);
         let upper = cmd.to_ascii_uppercase();
 
-        app.log.emit(
+        app.emit(
             Event::new("redis", port, peer, Kind::Command)
                 .data(truncate(&preview(&raw), MAX_FIELD))
                 .client(truncate(&cmd, MAX_FIELD))
@@ -58,7 +58,7 @@ pub async fn handle(mut sock: TcpStream, peer: SocketAddr, app: App, port: u16) 
             } else if parts.len() == 2 {
                 ev = ev.pass(truncate(parts[1], MAX_FIELD));
             }
-            app.log.emit(ev);
+            app.emit(ev);
             let _ = write_all_timeout(
                 &mut sock,
                 b"-ERR AUTH failed: WRONGPASS invalid username-password pair\r\n",
@@ -90,8 +90,7 @@ pub async fn handle(mut sock: TcpStream, peer: SocketAddr, app: App, port: u16) 
         let _ = write_all_timeout(&mut sock, reply, app.read_timeout).await;
     }
 
-    app.log
-        .emit(Event::new("redis", port, peer, Kind::Disconnect));
+    app.emit(Event::new("redis", port, peer, Kind::Disconnect));
     graceful_close(sock).await;
 }
 

@@ -7,7 +7,7 @@ use tokio::net::TcpStream;
 /// Capture the RDP cookie (`Cookie: mstshash=username`) and close with FIN.
 /// No X.224 handshake, no NLA, no outbound anything.
 pub async fn handle(mut sock: TcpStream, peer: SocketAddr, app: App, port: u16) {
-    app.log.emit(Event::new("rdp", port, peer, Kind::Connect));
+    app.emit(Event::new("rdp", port, peer, Kind::Connect));
     jitter_ms(app.jitter_ms.0, app.jitter_ms.1).await;
 
     match read_bounded(&mut sock, app.max_read.min(2048), app.read_timeout).await {
@@ -19,20 +19,17 @@ pub async fn handle(mut sock: TcpStream, peer: SocketAddr, app: App, port: u16) 
             if let Some(ref user) = user {
                 ev = ev.user(user.clone());
             }
-            app.log.emit(ev);
+            app.emit(ev);
             if let Some(user) = user {
-                app.log
-                    .emit(Event::new("rdp", port, peer, Kind::Password).user(user));
+                app.emit(Event::new("rdp", port, peer, Kind::Password).user(user));
             }
         }
         _ => {
-            app.log
-                .emit(Event::new("rdp", port, peer, Kind::Probe).data("connect-no-data"));
+            app.emit(Event::new("rdp", port, peer, Kind::Probe).data("connect-no-data"));
         }
     }
 
-    app.log
-        .emit(Event::new("rdp", port, peer, Kind::Disconnect));
+    app.emit(Event::new("rdp", port, peer, Kind::Disconnect));
     graceful_close(sock).await;
 }
 

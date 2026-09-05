@@ -1,6 +1,6 @@
 # honeypot
 
-Low-interaction TCP honeypot for a Raspberry Pi Zero 2W. Class D homelab.
+StingBox-style LAN intrusion alarm for a Raspberry Pi Zero 2W. Class D homelab. Passive trap: SMB/RDP/FTP/SSH/HTTP, JSONL, webhook/syslog. Never execute attacker input; never proxy.
 
 ## Commands
 
@@ -24,10 +24,12 @@ cargo run -- --bind 127.0.0.1 --ssh-port 2222 --telnet-port 2323 \
 ## Architecture
 
 - `src/main.rs` — clap, tracing, 4-worker Tokio runtime.
-- `src/lib.rs` — `run()`: spawn one listener task per service, wait for Ctrl-C.
-- `src/net.rs` — `socket2` bind (reuseaddr, nodelay, keepalive), semaphore accept loop, bounded reads, FIN-not-RST close.
-- `src/log.rs` — mpsc JSONL writer. Handlers `try_send`; a slow disk must not stall the trap.
-- `src/services/` — dumb protocol handlers. Each reads a few KB, replies from a constant, logs, drops.
+- `src/lib.rs` — `run()`: spawn one listener task per service, heartbeat, wait for Ctrl-C.
+- `src/net.rs` — `socket2` bind, semaphore accept loop, `App::emit` (log + MAC + whitelist + scan + webhook).
+- `src/alert.rs` — rate-limited webhook JSON + syslog CEF.
+- `src/services/smb.rs` — Windows file-server lure (NTLM capture, no share).
+- `src/services/ssh.rs` — russh; any password into a canned Ubuntu shell (HackerCam). Forwards refused.
+- `src/shell.rs` — canned replies only. `wget` always fails.
 
 Safety invariants (do not “improve” these away):
 

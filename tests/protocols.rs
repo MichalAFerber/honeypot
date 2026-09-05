@@ -11,16 +11,7 @@ use tokio::sync::Semaphore;
 
 fn app_and_rx() -> (App, tokio::sync::mpsc::Receiver<honeypot::event::Event>) {
     let (log, rx) = EventLog::channel(64);
-    let app = App {
-        log,
-        cap: Arc::new(Semaphore::new(8)),
-        read_timeout: Duration::from_secs(2),
-        idle_timeout: Duration::from_secs(2),
-        max_read: 4096,
-        max_lines: 16,
-        jitter_ms: (0, 0),
-    };
-    (app, rx)
+    (App::for_test(log), rx)
 }
 
 async fn start(
@@ -72,6 +63,29 @@ async fn ssh_banner_and_client_ident() {
 }
 
 #[tokio::test]
+async fn smb_negotiate_looks_like_windows() {
+    let (port, h, mut rx) = start(Service::Smb { port: 0 }).await;
+    let mut s = connect(port).await;
+    // NetBIOS + SMB2 negotiate (command 0), message id 1.
+    let mut pkt = vec![0u8; 4 + 64];
+    pkt[3] = 64;
+    pkt[4..8].copy_from_slice(b"\xfeSMB");
+    pkt[8..10].copy_from_slice(&64u16.to_le_bytes());
+    pkt[28..36].copy_from_slice(&1u64.to_le_bytes());
+    s.write_all(&pkt).await.unwrap();
+    let mut buf = [0u8; 256];
+    let n = tokio::time::timeout(Duration::from_secs(2), s.read(&mut buf))
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(n > 8, "smb response too short");
+    assert_eq!(&buf[4..8], b"\xfeSMB");
+    let ev = wait_kind(&mut rx, Kind::Probe).await;
+    assert_eq!(ev.svc, "smb");
+    h.abort();
+}
+
+#[tokio::test]
 async fn http_logs_get_and_serves_login() {
     let (port, h, mut rx) = start(Service::Http { port: 0 }).await;
     let mut s = connect(port).await;
@@ -84,7 +98,7 @@ async fn http_logs_get_and_serves_login() {
         .unwrap()
         .unwrap();
     let body = String::from_utf8_lossy(&buf[..n]);
-    assert!(body.contains("IP Camera"), "{body}");
+    assert!(body.contains("File Server"), "{body}");
     let ev = wait_kind(&mut rx, Kind::Probe).await;
     assert_eq!(ev.method.as_deref(), Some("GET"));
     assert_eq!(ev.ua.as_deref(), Some("nmap"));
@@ -208,15 +222,8 @@ async fn rdp_cookie() {
 #[tokio::test]
 async fn connection_cap_drops_excess() {
     let (log, mut rx) = EventLog::channel(64);
-    let app = App {
-        log,
-        cap: Arc::new(Semaphore::new(1)),
-        read_timeout: Duration::from_secs(2),
-        idle_timeout: Duration::from_secs(2),
-        max_read: 4096,
-        max_lines: 16,
-        jitter_ms: (0, 0),
-    };
+    let mut app = App::for_test(log);
+    app.cap = Arc::new(Semaphore::new(1));
     let listener = bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 0)).unwrap();
     let port = listener.local_addr().unwrap().port();
     let h = tokio::spawn(accept_loop(listener, app, Service::Ssh { port: 0 }));
