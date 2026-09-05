@@ -1,6 +1,6 @@
 # honeypot
 
-StingBox-style LAN intrusion alarm for a Raspberry Pi Zero 2W. Class D homelab. Passive trap: SMB/RDP/FTP/SSH/HTTP, JSONL, webhook/syslog. Never execute attacker input; never proxy.
+StingBox-style LAN intrusion alarm for a Raspberry Pi Zero 2W. Class A (OSS/MIT). Passive trap: SMB/RDP/FTP/SSH/HTTP, JSONL, webhook/syslog. Never execute attacker input; never proxy.
 
 ## Commands
 

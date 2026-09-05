@@ -1,6 +1,6 @@
 # honeypot
 
-Class D (internal homelab). A [StingBox](https://www.stingbox.com/)-style **LAN intrusion alarm** in Rust, aimed at a Raspberry Pi Zero 2W (the same 512 MB ARM class StingBox ships). Plug it into a subnet, let it look like an unsecured file server, and get a webhook the moment anything scans or logs in.
+Class A (OSS/MIT). A [StingBox](https://www.stingbox.com/)-style **LAN intrusion alarm** in Rust, aimed at a Raspberry Pi Zero 2W (the same 512 MB ARM class StingBox ships). Plug it into a subnet, let it look like an unsecured file server, and get a webhook the moment anything scans or logs in.
 
 It is a tripwire, not a lock. StingBox’s own FAQ: it does not stop hackers; it detects them so you can respond. Same here.
 
