@@ -1,0 +1,47 @@
+[Unit]
+Description=Low-interaction TCP honeypot
+Documentation=file:///usr/local/share/doc/honeypot/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=honeypot
+Group=honeypot
+ExecStart=/usr/local/bin/honeypot --bind 0.0.0.0 --log /var/log/honeypot/events.jsonl --max-connections 64 --workers 4
+Restart=always
+RestartSec=2
+
+# Bind :22/:80/etc without staying root. Survives binary replacement.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectHostname=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+ReadWritePaths=/var/log/honeypot
+
+LimitNOFILE=4096
+MemoryMax=80M
+TasksMax=256
+
+# Never inherit a proxy. This process must not fetch attacker URLs.
+UnsetEnvironment=HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy
+
+[Install]
+WantedBy=multi-user.target
