@@ -141,3 +141,30 @@ A honeypot on the home LAN without isolation is how scanners find the NAS next.
 - DS §11—SEO plumbing—N/A—2026-09-05—permanent
 - DS §12—security headers—N/A, not an HTTP product—2026-09-05—permanent
 - DS §15—Node pin / Pages CI—Rust binary; CI is cargo fmt/clippy/test—2026-09-05—permanent
+
+## Credits
+
+Direct crates only, versions from `Cargo.lock`. Compiled in; nothing is vendored into the tree. Transitive crates (296 lockfile versions) are not listed — that would be a `cargo about` file, not a table anyone maintains.
+
+| Crate | Version | License |
+|---|---|---|
+| [anyhow](https://crates.io/crates/anyhow) | 1.0.104 | MIT OR Apache-2.0 |
+| [chrono](https://crates.io/crates/chrono) | 0.4.45 | MIT OR Apache-2.0 |
+| [clap](https://crates.io/crates/clap) | 4.6.6 | MIT OR Apache-2.0 |
+| [rand](https://crates.io/crates/rand) | 0.10.2 | MIT OR Apache-2.0 |
+| [reqwest](https://crates.io/crates/reqwest) | 0.12.28 | MIT OR Apache-2.0 |
+| [russh](https://crates.io/crates/russh) | 0.63.2 | Apache-2.0 |
+| [serde](https://crates.io/crates/serde) | 1.0.229 | MIT OR Apache-2.0 |
+| [serde_json](https://crates.io/crates/serde_json) | 1.0.151 | MIT OR Apache-2.0 |
+| [socket2](https://crates.io/crates/socket2) | 0.5.10 | MIT OR Apache-2.0 |
+| [tokio](https://crates.io/crates/tokio) | 1.53.1 | MIT |
+| [tracing](https://crates.io/crates/tracing) | 0.1.44 | MIT |
+| [tracing-subscriber](https://crates.io/crates/tracing-subscriber) | 0.3.23 | MIT |
+
+Licenses read back from crates.io against those versions (a crate that does not exist returns `does not exist` rather than a license). `socket2` also appears as 0.6.5 in the lockfile as a transitive; the direct pin is 0.5.10.
+
+## License
+
+Released under the [MIT License](LICENSE) — © 2026 Michal Ferber.
+
+Built to the TGWAB Dev Standards **v2.58.0** (internal).
