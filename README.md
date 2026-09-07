@@ -167,4 +167,4 @@ Licenses read back from crates.io against those versions (a crate that does not 
 
 Released under the [MIT License](LICENSE) — © 2026 Michal Ferber.
 
-Built to the TGWAB Dev Standards **v2.58.0** (internal).
+Built to the TGWAB Dev Standards **v2.59.0** (internal).
