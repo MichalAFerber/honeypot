@@ -75,7 +75,7 @@ pub fn bind(addr: SocketAddr) -> anyhow::Result<TcpListener> {
     socket.set_reuse_address(true)?;
     #[cfg(unix)]
     let _ = socket.set_reuse_port(true);
-    socket.set_nodelay(true)?;
+    socket.set_tcp_nodelay(true)?;
     socket.set_keepalive(true)?;
     socket.set_nonblocking(true)?;
     if addr.is_ipv6() {
