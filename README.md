@@ -78,6 +78,8 @@ cargo build --release
 
 Do not compile on the Pi. Target is **aarch64** (the original Pi Zero was ARMv6; the Zero 2W is not).
 
+**32-bit Raspberry Pi OS is different.** If `uname -m` on the Pi prints `armv7l`, the userland and kernel are 32-bit and an aarch64 binary will not run. Build `armv7-unknown-linux-musleabihf` instead (`make pi-armv7`), or download `honeypot-armv7-unknown-linux-musleabihf` and its `.sha256` from a GitHub release: the `release` workflow builds it on every `v*` tag.
+
 ```sh
 cargo install cross --git https://github.com/cross-rs/cross
 rustup target add aarch64-unknown-linux-gnu

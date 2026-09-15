@@ -1,0 +1,86 @@
+name: release
+
+# Builds the 32-bit ARM (armv7l) binary for Raspberry Pi OS 32-bit on a Pi Zero 2W.
+# Those hosts run a 32-bit userland and kernel (`uname -m` = armv7l), so the aarch64
+# targets in the Makefile do not run on them.
+#
+# Pull requests that touch a build input build the binary as proof and upload it as a
+# workflow artifact. A `v*` tag builds it and attaches it, with its SHA-256, to a
+# GitHub release.
+
+on:
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "Cross.toml"
+      - ".cargo/**"
+      - "src/**"
+      - ".github/workflows/release.yml"
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  TARGET: armv7-unknown-linux-musleabihf
+
+jobs:
+  build-armv7:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: stable
+      - uses: taiki-e/install-action@3f74d7c16a4242f1c95561e98edc25d36adb4375 # v2.87.12
+        with:
+          tool: cross
+      - name: Build
+        run: cross build --release --locked --target "$TARGET"
+      - name: Prove it is a 32-bit ARM static binary
+        run: |
+          set -euo pipefail
+          bin="target/$TARGET/release/honeypot"
+          info=$(file -b "$bin")
+          echo "$info"
+          case "$info" in
+            *"ELF 32-bit LSB"*"ARM"*) ;;
+            *) echo "::error::not a 32-bit ARM ELF: $info"; exit 1 ;;
+          esac
+          case "$info" in
+            *"statically linked"*|*"static-pie linked"*) ;;
+            *) echo "::error::not statically linked: $info"; exit 1 ;;
+          esac
+          mkdir -p dist
+          cp "$bin" "dist/honeypot-$TARGET"
+          (cd dist && sha256sum "honeypot-$TARGET" > "honeypot-$TARGET.sha256")
+          ls -l dist && cat "dist/honeypot-$TARGET.sha256"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: honeypot-${{ env.TARGET }}
+          path: dist/
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build-armv7
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: honeypot-${{ env.TARGET }}
+          path: dist/
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" \
+            --notes "Static armv7l (32-bit ARM, musl) build for Raspberry Pi OS 32-bit. Verify with the .sha256 file."
