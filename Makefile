@@ -1,4 +1,4 @@
-.PHONY: build test fmt lint pi-gnu pi-musl
+.PHONY: build test fmt lint pi-gnu pi-musl pi-armv7
 
 build:
 	cargo build --release
@@ -18,3 +18,7 @@ pi-gnu:
 
 pi-musl:
 	cross build --release --target aarch64-unknown-linux-musl
+
+# Raspberry Pi OS 32-bit (`uname -m` = armv7l). The aarch64 builds above do not run there.
+pi-armv7:
+	cross build --release --target armv7-unknown-linux-musleabihf

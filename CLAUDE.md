@@ -11,6 +11,8 @@ cargo fmt
 cargo build --release
 # Pi Zero 2W (needs Docker + cross):
 make pi-musl
+# Pi on 32-bit Raspberry Pi OS (uname -m = armv7l):
+make pi-armv7
 ```
 
 Local demo without privileged ports:
