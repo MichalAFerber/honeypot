@@ -62,7 +62,7 @@ pub struct Args {
     pub smb_port: u16,
 
     /// POST JSON alerts here (Discord/ntfy/Herald). HTTPS allowed.
-    #[arg(long, env = "HONEYPOT_WEBHOOK")]
+    #[arg(long, env = "HONEYPOT_WEBHOOK", hide_env_values = true)]
     pub webhook: Option<String>,
 
     /// Syslog CEF destination, host:port (TCP then UDP)
