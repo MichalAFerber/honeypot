@@ -45,7 +45,7 @@ impl FromStr for WebhookUrl {
 /// Redacted on purpose: see the module docs.
 impl fmt::Display for WebhookUrl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
+        f.write_str(&self.redacted())
     }
 }
 
@@ -53,13 +53,13 @@ impl fmt::Display for WebhookUrl {
 /// `Args`, `AlertConfig` — is safe to print.
 impl fmt::Debug for WebhookUrl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "WebhookUrl({})", self.0)
+        write!(f, "WebhookUrl({})", self.redacted())
     }
 }
 
 /// The value the startup line logs for the `webhook` field.
 pub fn log_field(url: Option<&WebhookUrl>) -> String {
-    url.map(|u| u.expose().to_string())
+    url.map(WebhookUrl::redacted)
         .unwrap_or_else(|| "-".to_string())
 }
 

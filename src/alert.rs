@@ -156,7 +156,7 @@ async fn worker(cfg: AlertConfig, mut rx: mpsc::Receiver<Event>) {
                 // `without_url` is load-bearing: a reqwest error's Display
                 // appends the URL it was for, token and all. The redacted
                 // `url` still says which endpoint failed.
-                tracing::warn!(error = %e, webhook = %url, "webhook failed");
+                tracing::warn!(error = %e.without_url(), webhook = %url, "webhook failed");
             }
         }
         if let Some(addr) = cfg.syslog {
@@ -329,7 +329,7 @@ mod webhook_failure_tests {
             .expect_err("posting to a closed local port must fail");
 
         // Mirrors `tracing::warn!(error = %e.without_url(), webhook = %url, ...)`.
-        let rendered = format!("error={} webhook={}", err, url);
+        let rendered = format!("error={} webhook={}", err.without_url(), url);
         assert!(
             !rendered.contains(token),
             "the webhook-failure log leaked the token: {rendered}"
