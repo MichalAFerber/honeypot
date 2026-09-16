@@ -1,6 +1,6 @@
 [package]
 name = "honeypot"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "StingBox-style LAN intrusion alarm / low-interaction honeypot for Raspberry Pi Zero 2W"
 license = "MIT"
