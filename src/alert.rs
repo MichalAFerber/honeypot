@@ -75,6 +75,11 @@ impl Alerter {
     }
 }
 
+// The webhook body carries BOTH vocabularies on purpose. `severity`/`message`/
+// `name`/`event` are the original fields, unchanged for existing consumers. The
+// `level`/`title`/`description`/`source` set is what a generic relay reads (the
+// estate's notify-relay renders exactly those into a Discord embed); without them
+// every alert arrives as an empty "Notification" with no text.
 #[derive(Serialize)]
 struct WebhookBody<'a> {
     severity: Severity,
@@ -82,6 +87,21 @@ struct WebhookBody<'a> {
     timestamp: String,
     name: &'a str,
     event: &'a Event,
+    level: &'static str,
+    title: String,
+    description: String,
+    source: &'a str,
+}
+
+impl Severity {
+    /// Generic relay vocabulary. Critical is the one that must page.
+    pub fn level(self) -> &'static str {
+        match self {
+            Severity::Critical => "error",
+            Severity::Important => "warn",
+            Severity::Info => "info",
+        }
+    }
 }
 
 async fn worker(cfg: AlertConfig, mut rx: mpsc::Receiver<Event>) {
@@ -120,6 +140,16 @@ async fn worker(cfg: AlertConfig, mut rx: mpsc::Receiver<Event>) {
                 timestamp: ev.ts.to_rfc3339(),
                 name: &cfg.name,
                 event: &ev,
+                level: ev.event.severity().level(),
+                title: format!(
+                    "{} {} on {}:{}",
+                    cfg.name,
+                    ev.event.as_str(),
+                    ev.svc,
+                    ev.dst_port
+                ),
+                description: message.clone(),
+                source: &cfg.name,
             };
             if let Err(e) = client.post(url).json(&body).send().await {
                 tracing::warn!(error = %e, "webhook failed");
@@ -195,4 +225,74 @@ async fn send_syslog(addr: SocketAddr, msg: &str) -> std::io::Result<()> {
     let sock = UdpSocket::bind("0.0.0.0:0").await?;
     sock.send_to(msg.as_bytes(), addr).await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod webhook_body_tests {
+    use super::*;
+    use crate::event::{Event, Kind};
+    use std::net::SocketAddr;
+
+    fn body_json(kind: Kind) -> serde_json::Value {
+        let src: SocketAddr = "192.168.50.14:4242".parse().unwrap();
+        let ev = Event::new("ssh", 2222, src, kind);
+        let message = format_message(&ev);
+        let body = WebhookBody {
+            severity: ev.event.severity(),
+            message: message.clone(),
+            timestamp: ev.ts.to_rfc3339(),
+            name: "opie",
+            event: &ev,
+            level: ev.event.severity().level(),
+            title: format!(
+                "{} {} on {}:{}",
+                "opie",
+                ev.event.as_str(),
+                ev.svc,
+                ev.dst_port
+            ),
+            description: message,
+            source: "opie",
+        };
+        serde_json::to_value(&body).expect("serializes")
+    }
+
+    #[test]
+    fn carries_the_generic_relay_fields() {
+        let v = body_json(Kind::Password);
+        for f in ["level", "title", "description", "source"] {
+            assert!(
+                v.get(f).is_some(),
+                "missing {f}: a relay renders an empty notification without it"
+            );
+        }
+        assert!(
+            !v["title"].as_str().unwrap().is_empty(),
+            "title must not be empty"
+        );
+        assert!(
+            !v["description"].as_str().unwrap().is_empty(),
+            "description must not be empty"
+        );
+        assert_eq!(v["source"], "opie");
+    }
+
+    #[test]
+    fn keeps_the_original_fields() {
+        let v = body_json(Kind::Scan);
+        for f in ["severity", "message", "timestamp", "name", "event"] {
+            assert!(v.get(f).is_some(), "removed pre-existing field {f}");
+        }
+    }
+
+    #[test]
+    fn severity_maps_to_relay_levels() {
+        assert_eq!(Severity::Critical.level(), "error");
+        assert_eq!(Severity::Important.level(), "warn");
+        assert_eq!(Severity::Info.level(), "info");
+        // and through a real event: a captured password must page, not inform.
+        assert_eq!(body_json(Kind::Password)["level"], "error");
+        assert_eq!(body_json(Kind::Scan)["level"], "warn");
+        assert_eq!(body_json(Kind::Probe)["level"], "info");
+    }
 }
