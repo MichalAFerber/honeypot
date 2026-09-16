@@ -62,7 +62,7 @@ pub struct Args {
     pub smb_port: u16,
 
     /// POST JSON alerts here (Discord/ntfy/Herald). HTTPS allowed.
-    #[arg(long)]
+    #[arg(long, env = "HONEYPOT_WEBHOOK", hide_env_values = true)]
     pub webhook: Option<String>,
 
     /// Syslog CEF destination, host:port (TCP then UDP)
@@ -105,4 +105,29 @@ pub struct Args {
     pub no_rdp: bool,
     #[arg(long)]
     pub no_smb: bool,
+}
+
+#[cfg(test)]
+mod webhook_env_tests {
+    use super::*;
+    use clap::CommandFactory;
+
+    // §16: the webhook URL (which carries the notify token) must never show
+    // up in --help just because HONEYPOT_WEBHOOK is set in the environment.
+    #[test]
+    fn webhook_env_value_is_hidden_from_help() {
+        let sentinel = "https://example.invalid/S3CRET-SENTINEL-TOKEN";
+        std::env::set_var("HONEYPOT_WEBHOOK", sentinel);
+        let help = Args::command().render_long_help().to_string();
+        std::env::remove_var("HONEYPOT_WEBHOOK");
+
+        assert!(
+            !help.contains(sentinel),
+            "help leaked the HONEYPOT_WEBHOOK value:\n{help}"
+        );
+        assert!(
+            help.contains("HONEYPOT_WEBHOOK"),
+            "help should still name the HONEYPOT_WEBHOOK variable:\n{help}"
+        );
+    }
 }
