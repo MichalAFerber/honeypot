@@ -25,7 +25,7 @@ StingBox’s advertised lure is SSH, RDP, FTP, SMB, and HTTP/S. This crate match
 
 Alerts (the actual product, same as StingBox):
 
-- `--webhook https://ntfy.sh/your-topic` — JSON POST on probe/login/command (rate-limited per source IP, default 10 minutes; passwords always go through)
+- `--webhook https://ntfy.sh/your-topic` (or `HONEYPOT_WEBHOOK` in the environment, preferred for `deploy/install.sh`/systemd so the URL never lands in argv) — JSON POST on probe/login/command (rate-limited per source IP, default 10 minutes; passwords always go through)
   - The JSON carries both its own vocabulary (`severity`, `message`, `name`, `event`) and the generic relay set (`level` = error/warn/info, `title`, `description`, `source`), so a relay that renders generic events — the estate's notify-relay into Discord, for example — shows the alert text instead of an empty notification.
 - `--syslog 192.168.1.10:514` — CEF over TCP, UDP fallback
 - `--allow-ip 192.168.1.5` — whitelist your vulnerability scanner

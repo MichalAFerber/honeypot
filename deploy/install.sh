@@ -16,9 +16,12 @@ id honeypot >/dev/null 2>&1 || useradd --system --home /nonexistent --shell /usr
 install -d -o honeypot -g honeypot -m 0750 /var/log/honeypot
 install -d -o honeypot -g honeypot -m 0750 /var/lib/honeypot
 if [ ! -f /etc/honeypot.env ]; then
-    printf '%s\n' '# HONEYPOT_ARGS="--webhook https://ntfy.sh/your-topic --allow-ip 192.168.1.10"' > /etc/honeypot.env
-    chmod 0640 /etc/honeypot.env
+    {
+        printf '%s\n' '# HONEYPOT_WEBHOOK="https://ntfy.sh/your-topic"'
+        printf '%s\n' '# HONEYPOT_ARGS="--allow-ip 192.168.1.10"'
+    } > /etc/honeypot.env
 fi
+chmod 0600 /etc/honeypot.env
 install -m 0755 "$BIN_SRC" /usr/local/bin/honeypot
 install -m 0644 deploy/honeypot.service /etc/systemd/system/honeypot.service
 install -m 0644 deploy/logrotate /etc/logrotate.d/honeypot
