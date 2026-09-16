@@ -8,6 +8,7 @@ pub mod scan;
 pub mod services;
 pub mod shell;
 pub mod util;
+pub mod webhook;
 
 use crate::alert::{AlertConfig, Alerter};
 use crate::cli::Args;
@@ -123,7 +124,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         bind = %bind,
         log = %args.log.display(),
         max_connections = args.max_connections,
-        webhook = args.webhook.as_deref().unwrap_or("-"),
+        webhook = %crate::webhook::log_field(args.webhook.as_ref()),
         "honeypot running; Ctrl-C to stop"
     );
 
