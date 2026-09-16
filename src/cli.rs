@@ -1,3 +1,4 @@
+use crate::webhook::WebhookUrl;
 use clap::Parser;
 use std::net::IpAddr;
 use std::path::PathBuf;
@@ -62,8 +63,11 @@ pub struct Args {
     pub smb_port: u16,
 
     /// POST JSON alerts here (Discord/ntfy/Herald). HTTPS allowed.
+    ///
+    /// Typically carries a credential in its query string, so it is a
+    /// `WebhookUrl`, which redacts itself when formatted.
     #[arg(long, env = "HONEYPOT_WEBHOOK", hide_env_values = true)]
-    pub webhook: Option<String>,
+    pub webhook: Option<WebhookUrl>,
 
     /// Syslog CEF destination, host:port (TCP then UDP)
     #[arg(long)]
@@ -128,6 +132,30 @@ mod webhook_env_tests {
         assert!(
             help.contains("HONEYPOT_WEBHOOK"),
             "help should still name the HONEYPOT_WEBHOOK variable:\n{help}"
+        );
+    }
+
+    // `Args` derives Debug, so anything that debug-formats it prints every
+    // field. The webhook URL carries the notify token, so it must not be one of
+    // the readable ones.
+    #[test]
+    fn debug_of_args_hides_the_webhook_value() {
+        use clap::Parser as _;
+        let token = "ARGSDEBUGSENTINEL0123456789";
+        let args = Args::parse_from([
+            "honeypot",
+            "--webhook",
+            &format!("https://relay.example.invalid/hook?token={token}"),
+        ]);
+
+        let rendered = format!("{args:?}");
+        assert!(
+            !rendered.contains(token),
+            "Debug for Args leaked the webhook token: {rendered}"
+        );
+        assert!(
+            rendered.contains("relay.example.invalid"),
+            "Debug for Args should still name the webhook host: {rendered}"
         );
     }
 }

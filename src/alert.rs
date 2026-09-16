@@ -1,4 +1,5 @@
 use crate::event::{Event, Kind};
+use crate::webhook::WebhookUrl;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
@@ -37,7 +38,7 @@ pub struct Alerter {
 
 #[derive(Clone, Debug)]
 pub struct AlertConfig {
-    pub webhook: Option<String>,
+    pub webhook: Option<WebhookUrl>,
     pub syslog: Option<SocketAddr>,
     pub cooldown: Duration,
     pub name: String,
@@ -151,8 +152,11 @@ async fn worker(cfg: AlertConfig, mut rx: mpsc::Receiver<Event>) {
                 description: message.clone(),
                 source: &cfg.name,
             };
-            if let Err(e) = client.post(url).json(&body).send().await {
-                tracing::warn!(error = %e, "webhook failed");
+            if let Err(e) = client.post(url.expose()).json(&body).send().await {
+                // `without_url` is load-bearing: a reqwest error's Display
+                // appends the URL it was for, token and all. The redacted
+                // `url` still says which endpoint failed.
+                tracing::warn!(error = %e.without_url(), webhook = %url, "webhook failed");
             }
         }
         if let Some(addr) = cfg.syslog {
@@ -294,5 +298,45 @@ mod webhook_body_tests {
         assert_eq!(body_json(Kind::Password)["level"], "error");
         assert_eq!(body_json(Kind::Scan)["level"], "warn");
         assert_eq!(body_json(Kind::Probe)["level"], "info");
+    }
+}
+
+#[cfg(test)]
+mod webhook_failure_tests {
+    use super::*;
+    use crate::webhook::WebhookUrl;
+
+    // Issue #14 asks for redaction on the failed-webhook log line. That path has
+    // never fired on the deployed host, so nothing has ever looked at what it
+    // prints — exercise it deliberately: post to a closed local port and render
+    // exactly what the warning renders.
+    #[tokio::test]
+    async fn failed_delivery_log_line_hides_the_token() {
+        let token = "FAILPATHSENTINEL0123456789";
+        let url: WebhookUrl = format!("http://127.0.0.1:1/notify/honeypot?token={token}")
+            .parse()
+            .unwrap();
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(2))
+            .build()
+            .expect("client builds");
+
+        let err = client
+            .post(url.expose())
+            .json(&serde_json::json!({ "probe": true }))
+            .send()
+            .await
+            .expect_err("posting to a closed local port must fail");
+
+        // Mirrors `tracing::warn!(error = %e.without_url(), webhook = %url, ...)`.
+        let rendered = format!("error={} webhook={}", err.without_url(), url);
+        assert!(
+            !rendered.contains(token),
+            "the webhook-failure log leaked the token: {rendered}"
+        );
+        assert!(
+            rendered.contains("127.0.0.1:1"),
+            "the failure log should still say which endpoint failed: {rendered}"
+        );
     }
 }
