@@ -244,7 +244,13 @@ mod webhook_body_tests {
             name: "opie",
             event: &ev,
             level: ev.event.severity().level(),
-            title: format!("{} {} on {}:{}", "opie", ev.event.as_str(), ev.svc, ev.dst_port),
+            title: format!(
+                "{} {} on {}:{}",
+                "opie",
+                ev.event.as_str(),
+                ev.svc,
+                ev.dst_port
+            ),
             description: message,
             source: "opie",
         };
@@ -255,10 +261,19 @@ mod webhook_body_tests {
     fn carries_the_generic_relay_fields() {
         let v = body_json(Kind::Password);
         for f in ["level", "title", "description", "source"] {
-            assert!(v.get(f).is_some(), "missing {f}: a relay renders an empty notification without it");
+            assert!(
+                v.get(f).is_some(),
+                "missing {f}: a relay renders an empty notification without it"
+            );
         }
-        assert!(!v["title"].as_str().unwrap().is_empty(), "title must not be empty");
-        assert!(!v["description"].as_str().unwrap().is_empty(), "description must not be empty");
+        assert!(
+            !v["title"].as_str().unwrap().is_empty(),
+            "title must not be empty"
+        );
+        assert!(
+            !v["description"].as_str().unwrap().is_empty(),
+            "description must not be empty"
+        );
         assert_eq!(v["source"], "opie");
     }
 
